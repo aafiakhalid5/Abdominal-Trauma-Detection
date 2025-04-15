@@ -1,4 +1,4 @@
-# Abdominal Trauma Detection (RSNA 2023 Challenge)
+# Abdominal Trauma Detection (RSNA Challenge)
 
 This repository presents a deep learning pipeline for identifying abdominal injuries using contrast-enhanced CT scans. The project was developed for the RSNA 2023 Abdominal Trauma Detection Kaggle competition and focuses on classifying injuries in key organs including the liver, spleen, kidney, and bowel, as well as detecting internal bleeding.
 
