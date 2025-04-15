@@ -1,0 +1,711 @@
+\documentclass[a4paper,12pt]{article}
+
+% =================== Packages ===================
+\usepackage{graphicx}    % For images
+\usepackage{adjustbox}   % For logo scaling/alignment
+\usepackage{setspace}    % For spacing
+\usepackage{geometry}    % To control page margins
+\usepackage{hyperref}    % Clickable links
+\usepackage{xcolor}      % Optional: colored links
+\usepackage{lmodern}     % Better font rendering
+
+% ================ Margin Setup ==================
+\geometry{
+  a4paper,
+  left=2cm,
+  right=2.8cm,
+  top=3.5cm,
+  bottom=4cm
+}
+
+% ================ Hyperref Styling ==============
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    pdftitle={Abdominal Trauma Detection},
+    pdfauthor={Aafia Khalid},
+    pdfsubject={Scientific Report - RSNA Challenge},
+    pdfkeywords={Abdominal Trauma, Deep Learning, CT Imaging}
+}
+
+\begin{document}
+
+% ================ Title Page ====================
+\begin{titlepage}
+    \thispagestyle{empty}
+    
+    % ----- Centered PRL Logo -----
+    \begin{center}
+        \vspace*{-2.5cm}
+        \includegraphics[width=6cm]{lmedoc/logo_large.png} % update path if needed
+        \vspace{1.8cm}
+
+        % ----- University Info -----
+        {\LARGE \textbf{Friedrich-Alexander-Universität \\[0.3cm]Erlangen-Nürnberg}}\\[0.5cm]
+        {\large \textit{Pattern Recognition Lab (LME)}}\\
+
+        \vspace{0.5cm}
+        \rule{\textwidth}{0.4pt} \\[0.5cm]
+        
+        % ----- Title -----
+        {\itshape As part of the Master’s in Data Science}\\[0.4cm]
+        {\Large \textbf{Scientific Report on the Machine Learning Project}}\\[1.0cm]
+        {\LARGE \textbf{Abdominal Trauma Detection}}\\[0.8cm]
+
+        % ----- Submitted to -----
+        {\textit{Submitted to}}\\[0.3cm]
+        {\Large \textbf{Dr.-Ing. Vincent Christlein}}\\[0.4cm]
+
+        % ----- Author -----
+        {\textit{by}}\\[0.3cm]
+        {\Large \textbf{Aafia Khalid}}\\[0.3cm]
+        {\large \textit{MSc. Data Science}}\\[2.5cm]
+
+        % ----- Meta Info -----
+        \begin{center}
+            \large \textbf{Matriculation Number:} 23468810\\
+            \large \textbf{Submission Date:} 15.04.2025
+        \end{center}
+    \end{center}
+\end{titlepage}
+
+\section*{Abstract}
+This report presents a deep learning-based approach to multi-label classification for identifying abdominal injuries in trauma patients, as part of the RSNA 2023 Abdominal Trauma Detection Kaggle competition. The competition centers on the critical but difficult clinical task of identifying active bleeding and organ injuries using contrast-enhanced abdominal CT scans.
+
+
+For object detection and multi-label classification of abdominal trauma across important organs such as the liver, spleen, kidney, and bowel, the solution made use of the KerasCV RetinaNet model. Extensive preprocessing, including 3D volume slicing and image standardization, was applied. The report details the training strategy, data augmentation, label encoding, and evaluation setup. Results demonstrate moderate classification performance, with discussion on key bottlenecks such as label imbalance and computational constraints. Future improvements suggested focus on volumetric modeling, better augmentation, and anatomical localization.
+\clearpage
+\tableofcontents
+\clearpage
+
+\listoftables
+\listoffigures
+\cleardoublepage
+
+\clearpage
+% --- Enable Custom Header from This Point On ---
+\pagestyle{fancy}
+\fancyhf{}  % Clear default header/footer
+\renewcommand{\headrulewidth}{0.5pt}  % No header line
+
+% --- Introduction ---
+\section{Introduction}
+\subsection{Background and Motivation}
+Abdominal trauma is a major cause of death and a major global health concern in emergency and trauma care settings \cite{deunk2007value}. Rapid and precise identification of internal injuries, such as spleen or liver lacerations and active bleeding, is critical to guide surgical intervention and improve survival rates. The gold standard imaging modality in modern clinical workflows for radiologists to assess trauma-related damage is \textbf{contrast-enhanced abdominal CT scans}. These scans provide detailed anatomical visualization that can help clinicians identify hemorrhage indicators or injuries specific to a particular organ \cite{soto2005ct}.\\
+
+
+The manual interpretation of abdominal CT scans is time-consuming and susceptible to inter-observer variability, despite its efficacy. Radiologists are frequently under tremendous pressure to interpret scans accurately and promptly in emergency care settings. By automating injury detection, standardizing interpretation, and speeding up diagnosis, machine learning and computer vision have the potential to assist radiologists in this situation.\\
+
+Advances in deep learning and the growing availability of labeled medical imaging data are generating interest in developing models that can locate, identify, and classify injuries in a clinical setting. The \textbf{RSNA 2023 Abdominal Trauma Detection} competition, which is hosted on Kaggle and provides a structured environment for examining machine learning applications in radiology, reflects this growing need.
+\subsection{Problem Statement}
+The \textbf{automated identification of abdominal trauma} in contrast-enhanced CT scans is the main objective of the RSNA competition. This is a \textbf{multi-label classification} task because each CT scan in the dataset may show one or more injuries.\\
+The six injury categories to detect are:
+\begin{itemize}
+    \item Liver injury
+    \item Spleen injury
+    \item Kidney injury
+    \item Bowel injury
+    \item Active bleeding
+    \item General abdomina injury
+
+\end{itemize}
+
+Every label is handled like a separate binary classification task. The challenge is in developing models that can accurately predict each organ and type of injury while simultaneously learning common visual characteristics throughout the abdomen. The lack of lesion-level annotations, class imbalance, and the diverse nature of injuries make this task more difficult.
+\subsection{Scope}
+The aim of this project is to create a deep learning pipeline for detecting abdominal trauma, utilizing the publicly accessible dataset provided by RSNA. The primary goals include:
+\begin{itemize}
+    \item Liver injuryTransforming DICOM CT volumes into 2D image slices that are appropriate for modeling.
+    \item Liver injuryDeveloping a deep learning model that can perform multi-label classification.
+    \item Liver injuryAddressing class imbalance and weak supervision through strategic choices in architecture and loss functions.
+    \item Liver injuryAssessing the model's effectiveness using standard evaluation metrics such as AUC and F1-score.
+\end{itemize}
+Although lesion localization and segmentation could be logical extensions of the current work, it is important to note that these aspects are not included in the project. Due to computational constraints, the project also highlights the use of lightweight 2D models, while acknowledging the potential of 3D volumetric modeling for future iterations. 
+
+\section{Literature Review}
+Medical imaging has been significantly impacted by recent advances in deep learning, particularly in areas like segmentation, detection, and classification. With multi-label classification models like CheXNet reaching performance levels comparable to radiologists in identifying conditions like pneumonia in chest X-rays, convolutional neural networks have been widely used in the analysis of radiological data \cite{rajpurkar2017chexnet}. A popular method for dealing with co-occurring pathologies in models is the use of binary cross-entropy loss and sigmoid activations.\\
+
+Because computed tomography (CT) can generate high-resolution, contrast-enhanced images, it is considered the standard for evaluating abdominal injuries in the context of trauma imaging. Clinical evaluations by Soto et al. and systematic reviews by Deunk et al. have emphasized the critical role of CT in identifying injuries like active bleeding and solid organ lacerations, especially in patients who are hemodynamically stable \cite{deunk2007value,soto2005ct} . However, the manual interpretation of these images is time-consuming and subject to error, which makes the incorporation of artificial intelligence a compelling argument.\\
+
+The usefulness of deep learning in trauma and emergency imaging has been demonstrated in numerous studies. Kim et al., for example, developed a model for identifying liver damage from CT scans, showing that organ-specific AI models can greatly increase diagnostic accuracy \cite{kim2020ai}. Similarly, deep learning models have either equaled or outperformed human performance in domains like intracranial hemorrhage detection and fracture classification, confirming their potential utility in actual clinical settings \cite{chilamkurthy2018deep,olczak2017artificial}. \\
+
+Medical AI innovation has been sparked by competitions on sites like Kaggle, which provide insightful information about issues like class imbalance, inadequate supervision, and the requirement for generalization across multiple data sources.This pattern is maintained by the RSNA 2023 Abdominal Trauma Detection challenge, which adds new complexity such as volumetric data processing, multi-label learning, and the requirement for scalable models that can be trained with sparse annotation.\\
+
+Competitions on websites like Kaggle have spurred innovation in medical AI by providing valuable insights into problems like class imbalance, insufficient supervision, and generalization across multiple data sources. The RSNA 2023 Abdominal Trauma Detection challenge builds on this legacy by introducing new complexity, such as multi-label learning, volumetric data processing, and the need for scalable models trained with sparse annotation. This project supports these ongoing efforts by exploring a deep learning approach based on 2D slices to automate trauma classification in abdominal CT imaging.
+\section{Fundamentals and Related Technology}
+\subsection{Medical Imaging and Multi-Label Classification}
+\textbf{Computed Tomography (CT)} is essential for trauma assessment because it provides high-resolution, volumetric images. Contrast-enhanced abdominal CT scans are used in this competition to detect damage to organs like the kidneys, liver, and spleen. A 3D volume is produced by a sequence of 2D axial slices in each scan. By making blood vessels more visible, contrast agents help identify organ damage and hemorrhages \cite{bosc2019computed}. \\
+
+The high dimensionality of CT data, differences in scanning protocols, and the loss of spatial coherence when slices are examined separately are significant obstacles. Although full 3D modeling provides enhanced anatomical context, 2D slice-based methods are more computationally manageable given the size of the dataset and the level of annotation required. \\
+
+This competition is designed as a \textbf{multi-label classification task}, where each scan may exhibit one or more of six types of injuries. The model is required to produce a sigmoid-activated probability vector of length six, representing each condition. To train the model, binary cross-entropy loss is applied to each label independently and then averaged \cite{zhang2014review}, facilitating the learning of co-occurring injuries while preserving label independence.
+
+\subsection{KerasCV RetinaNet}
+In this case, we used \textbf{RetinaNet}, a one-stage object detection model modified for image-level classification from the KerasCV library. To enable multi-scale feature extraction, this model uses a Feature Pyramid Network (FPN) in conjunction with a \textbf{ResNet-50} backbone that has been pretrained on ImageNet. The model was modified to provide injury probabilities for every 2D CT slice instead of identifying bounding boxes.Furthermore, RetinaNet integrates Focal Loss, which improves the model's attention to more difficult examples—a useful feature for medical tasks that are class-imbalanced \cite{lin2017focal}. Despite not being used in the last training stage, Focal Loss's inclusion in the framework provides room for further research.
+\subsection{Data Handling}
+Considering the limited size of the training dataset and the diverse visual characteristics of abdominal pathology, \textbf{data augmentation} techniques were employed to enhance generalization. The following augmentations were applied:
+\begin{itemize}
+    \item Random horizontal flips to mimic variations in patient orientation,
+    \item Adjustments to brightness and contrast to accommodate differences in scan intensity,
+    \item Rotation and scaling to increase robustness against anatomical variations.
+\end{itemize}
+Each CT scan was normalized and segmented into 2D slices, which were either stacked or processed independently based on the training batch. The slices were resized to a consistent dimension (e.g., 224×224 pixels) to align with the model's input specifications.\\
+
+A significant challenge in this competition is the \textbf{imbalance of labels}, particularly for less common conditions such as active bleeding. To address this issue, we experimented with weighted binary cross-entropy and investigated threshold tuning to enhance post-processing. Future enhancements may involve oversampling, pseudo-labeling, or generating synthetic data for injuries that are underrepresented \cite{johnson2019survey}.
+
+\subsection{Volume-to-Slice Representation}
+The 3D CT volumes were condensed into sets of 2D slices due to labeling and hardware limitations. This method is effective, but it loses anatomical context between slices. Because per-slice predictions are contrasted with volume-level labels, label noise is also introduced. In order to better capture spatial relationships, future models might benefit from utilizing transformer-based volumetric models, 3D CNNs, or hybrid aggregation techniques \cite{isensee2021nnunet}.
+
+\section{Exploratory Data Analysis}
+An exploratory analysis was performed to investigate the distribution of injury categories and evaluate the existence of target imbalance within the RSNA 2023 Abdominal Trauma Detection dataset. This analysis concentrated on the train.csv file, which includes injury annotations for each patient. The aim was to uncover trends in the frequency and co-occurrence of injuries, as well as to evaluate how these trends might influence model development and validation approaches \cite{ghosh2023eda}. 
+
+\subsection{Data Overview}
+The training dataset comprises 3,094 entries and 9 label columns, which correspond to binary or categorical targets for various abdominal injuries. Each entry represents a distinct patient ID. These include:
+\begin{itemize}
+
+    \item \verb|bowel_injury|
+    \item \verb|extravasation_injury|
+    \item \verb|kidney_low, kidney_high|
+    \item \verb|liver_low, liver_high|
+    \item \verb|spleen_low, spleen_high|
+    \item \verb|any_injury (aggregated label)|
+\end{itemize}
+Each row represents a unique patient ID. An initial inspection indicates that there are no missing values in any of the columns.
+
+\begin{table}[!htbp]
+    \centering
+        \vspace{0.2cm}
+    \begin{tabular}{|l|c|}
+        \hline
+        \textbf{Patient ID} &  \\
+        \hline
+        \verb|bowel_healthy| & 0 \\
+        \verb|bowel_injury| & 0 \\
+        \verb|extravasation_healthy| & 0 \\
+        \verb|extravasation_injury| & 0 \\
+        \verb|kidney_healthy| & 0 \\
+        \verb|kidney_low| & 0 \\
+        \verb|kidney_high| & 0 \\
+        \verb|liver_healthy| & 0 \\
+        \verb|liver_low| & 0 \\
+        \verb|liver_high| & 0 \\
+        \verb|spleen_healthy| & 0 \\
+        \verb|spleen_low| & 0 \\
+        \verb|spleen_high| & 0 \\
+        \verb|any_injury| & 0 \\
+        dtype: int64 &  \\
+        \hline
+        
+        \hline
+    \end{tabular}
+    \caption{Data Overview}
+    \label{tab:data_overview}
+\end{table}
+
+
+The target columns can be grouped by injury type:
+
+\begin{itemize}
+    \item \textbf{Binary lables:}
+    \begin{itemize}
+        \item \verb|bowel_injury|
+        \item \verb|extravasation_injury|
+    \end{itemize}
+    \item \textbf{Ternary labels }(encoded using multiple binary flags):
+        \begin{itemize}
+        \item \verb|kidney_low, kidney_high|
+        \item \verb|liver_low, liver_high|
+        \item \verb|spleen_low, spleen_high|
+    \end{itemize}
+    \item \textbf{Combined injury flag}
+    \begin{itemize}
+        \item \verb|any_injury| - a helper column indicating if any of the above injuries are present.
+    \end{itemize}
+\end{itemize}
+
+
+The \verb|value_counts()| summary across all target columns clearly shows that the number of \textbf{healthy patients} significantly exceeds that of injured patients, highlighting a considerable class imbalance.
+
+\begin{table}[!htbp]
+    \centering
+    
+    \vspace{0.2cm}
+    \begin{tabular}{|l|c|c|c|c|}
+        \hline
+        \textbf{Category} & \textbf{Healthy} & \textbf{Injury} & \textbf{Low} & \textbf{High} \\
+        \hline
+        Bowel & 98\% & 2\% & - & - \\
+        Extravasation & 93\% & 7\% & - & - \\
+        Kidney & 95\% & - & 3\% & 2\% \\
+        Liver & 89\% & - & 8\% & 1\% \\
+        Spleen & 88\% & - & 6\% & 4\% \\
+        \hline
+    
+    \end{tabular}
+    \label{tab:target_overview}
+    \caption{Target Column Overview}
+\end{table}
+
+
+\subsection{Correlation Analysis of Organ Health and Injury Labels}
+To delve deeper into the relationships among injury patterns, two correlation heatmaps were created—one illustrating the connections between healthy organs and the other focusing on different types of injuries. These visual representations offer insights into label co-occurrence patterns that can guide both model development and clinical interpretation.
+
+\subsubsection{Organ Health Correlation}
+The first heatmap assesses the Pearson correlation coefficients among the binary labels indicating healthy organs: bowel, extravasation, kidney, liver, and spleen. Overall, the correlation values are low across all organ pairs, suggesting minimal co-occurrence of health conditions. 
+The highest correlations observed were between:
+
+\begin{itemize}
+
+    \item \verb|extravasation_healthy and bowel_healthy: 0.13|
+    \item \verb|kidney_healthy and liver_healthy: 0.16|
+
+\end{itemize}
+
+These results imply that the health status of one organ does not strongly predict the health of another, reinforcing the notion that trauma may impact organs independently.
+
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/organhealthcorr.png}
+    \caption{Organ Health Correlation}
+    \label{fig:health_corr}
+\end{figure}
+
+\subsubsection{Organ Injury Correlation}
+
+The second heatmap analyzes the relationships among a wider array of injury-related labels, which include:
+\begin{itemize}
+
+
+
+    \item Binary \verb|injury_labels| for bowel and extravasation,
+    \item Severity-specific injury labels (both low and high) for the kidney, liver, and spleen,
+    \item \verb|any_injury| label that signifies the presence of any trauma.
+    \item Notable correlations include:
+    \begin{itemize}
+        \item \verb|liver_low and any_injury: 0.49|
+        \item \verb|	extravasation_injury and any_injury: 0.43|
+        \item \verb|spleen_low and any_injury: 0.43|
+        \item \verb|kidney_low and any_injury: 0.32|
+    \end{itemize}
+       
+\end{itemize}
+
+Significant correlations were identified, although moderate correlations were noted between the \verb|any_injury| label and specific injuries, while the pairwise correlations among individual injury types were generally low. Instances of negative or near-zero values in certain label pairs may indicate either the exclusivity of injury occurrences or data sparsity.
+\\
+\\
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/organinjurycorr.png}
+    \caption{Organ Injury Correlation}
+    \label{fig:injury_corr}
+\end{figure}
+ 
+These correlation trends highlight the somewhat independent nature of traumatic injuries across various organs, while also emphasizing the utility of the any injury label as a summarizing metric. The results advocate for the implementation of multi-label, multi-output models that can predict the injury status of each organ independently, while also potentially utilizing shared features or auxiliary targets such as \verb|any_injury.|
+
+\section{Methodology}	
+This section details the comprehensive pipeline utilized for creating a deep learning model aimed at injury classification and severity assessment in abdominal CT images, as part of the RSNA 2023 Abdominal Trauma Detection Challenge. The methodology includes configuration setup, data preprocessing, data partitioning, augmentation, and pipeline optimization using TensorFlow and KerasCV.
+\subsection{Configuration and Reproducibility}
+A configuration class was created in order to preserve uniformity and reproducibility during the training and validation stages. This class specifies key parameters that correlate to binary and severity labels for organs like the bowel, kidney, liver, and spleen, including seed, image dimensions, batch size, number of epochs, and target columns. To guarantee deterministic behavior during the shuffling and splitting processes, the random seed was set to 42 and the image resolution was standardized to 256×256 pixels.
+
+\verb|SEED = 42|
+
+\verb|IMAGE_SIZE = [256, 256]|
+
+\verb|BATCH_SIZE = 64 |
+
+\verb|EPOCHS = 10|
+\subsection{Dataset and Label Structure}
+The dataset consists of PNG images obtained from DICOM scans of abdominal CTs. These images are systematically arranged according to patient, series, and instance number. The labels are extracted from a CSV file and feature 14 binary columns that indicate the health status of organs (categorized as healthy, low severity, or high severity) and types of injuries (such as bowel injury and extravasation injury). Additionally, an auxiliary label, termed any injury, has been included for evaluation purposes, in accordance with the official guidelines of the RSNA challenge \cite{kaggle2023rsna}.
+The structure of the injury labels is as follows:
+
+\begin{itemize}
+    \item Organ-specific injuries: \verb|kidney_low, kidney_high, |etc.
+    \item Binary indicators of injury: \verb|bowel_injury, extravasation_injury|
+    \item Severity classifications: low and high for organ-specific injuries.
+\end{itemize}
+
+
+\subsection{Image Path Construction and Deduplication}
+A key preprocessing step involved the creation of file paths for the image instances, which were based on the patient ID, series ID, and instance number. Duplicate entries were eliminated to guarantee that the training dataset contained only unique records. Each image path was then aligned with its corresponding label in a DataFrame format.
+
+\subsection{Train-Validation Splitting Strategy}
+To address the class imbalance and the hierarchical nature of the labels, a group-based splitting strategy was employed. This method involved grouping the dataset by each target label and performing stratified splitting within those groups, utilizing an 80/20 train-validation ratio. This approach ensured a balanced and representative distribution of each label across both training and validation sets.
+
+\verb|from sklearn.model_selection import train_testsplit|
+
+
+\subsection{Image Decoding and Augmentation}
+A custom \verb|decode_image_and_label()| function was defined to handle:
+\begin{itemize}
+
+    \item Decoding PNG files (3-channel),
+    \item Resizing images to the model’s required input dimensions (256×256),
+    \item Normalizing pixel values to a range of [0, 1].
+
+\end{itemize}
+The labels were converted into float tensors and organized by anatomical region for subsequent tasks.\\
+
+Data augmentation was carried out using KerasCV’s Augmenter API, which included:
+\begin{itemize}
+    \item RandomFlip (horizontal and vertical),
+    \item RandomCutout for simulating occlusion \cite{kerascv2024augmentation}.
+
+\end{itemize}
+This phase improves the model's ability to generalize by mimicking real-world discrepancies in scan quality and positioning, which is particularly important in trauma imaging where variations in scan quality and angles are significant.
+
+\subsection{Efficient Data Pipeline with tf.data}
+To effectively manage large-scale data, a pipeline was developed utilizing TensorFlow’s tf.data API \cite{tensorflow2024tfdata}. This pipeline incorporated:
+
+\begin{itemize}
+
+    \item Shuffling with a buffer size ten times the batch size,
+    \item Parallel mapping for both decoding and augmentation,
+    \item Batching and prefetching to enhance performance.
+
+\end{itemize}
+This configuration minimized GPU idle time and maximized training efficiency, which is crucial for deep convolutional networks such as EfficientNetV2 \cite{tan2021efficientnetv2}. \\
+
+\verb|.map(decode_image_and_label,num_parallel_calls=AUTOTUNE)|
+
+\verb|.batch(BATCH_SIZE)|
+
+\verb|.prefetch(AUTOTUNE)|
+
+\subsection{Data Inspection and Visualization}
+Following the construction of the dataset, a batch of 64 samples was examined to verify both the shape and accuracy of the labels. The tensor shapes confirmed that the pipeline effectively produces images of dimensions (256, 256, 3) along with the appropriate multi-label vectors. Visual validation was performed using
+
+\verb|kerascv.visualization.plot_image_gallery()|\cite{kerascv2024augmentation}.
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.35\textwidth]{images/dv1.png}
+    \includegraphics[width=0.35\textwidth]{images/dv1.png}
+    \caption{Data Visualization}
+    \label{fig:dv_meth}
+\end{figure}
+
+
+\section{Model Architecture and Training}
+Using a pretrained \textbf{ResNet50} architecture from \textbf{KerasCV} as the feature extraction backbone, a transfer learning technique was used to create an efficient deep learning model for multi-label injury classification. This decision makes use of ResNet50's powerful representational capabilities, which have been trained on extensive image datasets in the past and offer a reliable starting point for medical imaging tasks \cite{he2016deep}.\\
+
+
+In order to enable multiple outputs for distinct anatomical regions, the model was built using Keras' Functional API. The backbone carried a single 2D input tensor with size (256,256,3). A \textbf{GlobalAveragePooling2D} layer was then added to lower the spatial dimensions and provide downstream classification heads with a common feature representation.
+
+
+\verb|backbone = keras_cv.models.ResNetBackbone.from_preset("resnet50_imagenet"))|
+
+
+\subsection{Multi-Head Output Architecture}
+The model's five dense, parallel branches, or "necks," stand for the following: 
+
+\begin{itemize}
+
+    \item Extravasation (internal bleeding)
+    \item Liver injury grading (healthy, low, high)
+    \item Kidney injury grading (healthy, low, high)
+    \item Spleen injury grading (healthy, low, high)
+\end{itemize}
+The output layers with the proper activation functions come after a 32-unit dense layer with the SiLU (Sigmoid Linear Unit) activation function at the start of each branch:
+\begin{itemize}
+
+    \item \textbf{Sigmoid} for binary classification (e.g., bowel, extra)
+    \item \textbf{Softmax} for multi-class classification (e.g., liver, kidney, spleen)
+\end{itemize}
+The model can predict multiple organ injuries at once thanks to this architecture's support for multi-label classification.\\
+To save memory, training was carried out on a single NVIDIA GPU with mixed precision enabled.
+\begin{table}[!htbp]
+    \centering
+    \begin{tabular}{|l|l|}
+        \hline
+        \textbf{Parameter} & \textbf{Value} \\
+        \hline
+        Epochs & 15 \\
+        Batch size & 16 \\
+        Learning rate & 1e-4 \\
+        Optimizer & Adam \\
+        Loss Function & Binary Crossentropy (multi-label) \\
+        \hline
+    \end{tabular}
+    \caption{Training Set-up}
+    \label{tab:training_setup}
+\end{table}
+
+
+\subsection{Loss Functions and Metrics}
+
+Each output head was given a unique loss function:
+
+\begin{itemize}
+    \item \textbf{BinaryCrossentropy} for binary labels (e.g., bowel injury)
+    \item \textbf{CategoricalCrossentropy} for graded labels (e.g., liver severity)
+\end{itemize}
+
+\verb|loss = {|
+
+\verb|"bowel": keras.losses.BinaryCrossentropy(),|
+
+\verb|"extra": keras.losses.BinaryCrossentropy(),|
+
+\verb|"liver": keras.losses.CategoricalCrossentropy(),|
+
+\verb|}|
+\\
+During training, classification performance per organ was evaluated by tracking each output head using accuracy metrics.
+\\
+
+\textbf{Learning Rate Scheduling }
+\\
+Training was stabilized and optimized using a \textbf{Cosine Decay learning rate schedule} \cite{loshchilov2017sgdr}. With this scheduling approach, the learning rate is progressively decreased by using a cosine decay curve after a warmup phase (10% of the total training steps).
+
+This timetable enables the model to refine the weight space at lower learning rates for stable convergence after first exploring it at higher ones.
+\\
+
+\verb|cosine_decay = CosineDecay(initial_learning_rate=1e-4,|
+
+\verb|decay_steps=decay_steps)|
+
+
+\subsection{Dataset Preparation for Training}
+The previously defined \verb|build_dataset()| function was used to create the training and validation datasets. The tf.data API was used to optimize data pipelines and cast labels to float32. The number of epochs, batch size, and dataset size were used to dynamically calculate the total number of training and warmup steps.
+\\
+
+\verb|total_train_steps = train_ds.cardinality().numpy() *|
+
+\verb|config.BATCH_SIZE * config.EPOCHS|
+
+\subsection{Training}
+\verb|Model.fit()| was used to train the model over ten epochs. Training logs demonstrate: • A steady increase in training accuracy for every label.
+
+\begin{itemize}
+    \item Minimal overfitting in early epochs and consistent validation performance.
+    \item High accuracy per organ (liver and kidney, for example, frequently surpass 0.85).
+\end{itemize}
+
+An example of model performance during epoch 5:
+\\
+
+\verb|kidney_accuracy: 0.8107 — val_kidney_accuracy: 0.8113  |
+
+\verb|liver_accuracy: 0.7690 — val_liver_accuracy: 0.8693  |
+
+\verb|extra_accuracy: 0.9170 — val_extra_accuracy: 0.8727| \\
+
+Using shared features learned through the ResNet50 backbone and task-specific fine-tuning applied through individual output branches, this multi-task architecture demonstrated efficacy in handling the multiple injury detection subtasks concurrently.
+
+
+\subsection{Results and Analysis}
+The accuracy metrics and loss trends for each of the five injury prediction tasks (bowel, extravasation, kidney, liver, and spleen) were plotted for both training and validation sets in order to assess the performance of the multi-task ResNet-based model. The ability of the model to generalize across organ types and injury severities is revealed by these plots and their trends
+
+\subsubsection{Training and Validation Accuracy per Organ}
+
+\textbf{Bowel}
+
+Over the majority of epochs, the model showed high training accuracy (>0.9). Validation accuracy, however, stayed constant at 0.52, suggesting possible \textbf{overfitting}. Class imbalance or a lack of diversity in the validation set's bowel injury patterns could be the cause of this.
+
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/bowel.png}
+    \caption{Bowel}
+    \label{fig:dv_meth}
+\end{figure}
+
+
+\textbf{Extravasation (Active Bleeding)}
+The extravasation accuracy trends were more encouraging. By epoch 10, training accuracy had steadily increased to approximately 0.84. The model successfully learned features suggestive of internal bleeding and generalized well on this task, as evidenced by the validation accuracy, which followed closely behind and peaked at about 0.82.
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/extra.png}
+    \caption{Extravasation (Active Bleeding)}
+    \label{fig:dv_meth}
+\end{figure}
+\\
+
+
+\textbf{Kidney}
+
+The accuracy of kidney injury classification increased sharply during training and validation, reaching close to 0.94 and 0.92, respectively. This consistency demonstrates that the model takes advantage of distinct patterns in the data and successfully differentiates between kidney injury levels (healthy, low, and high).
+\\
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/kidney.png}
+    \caption{Kidney}
+    \label{fig:dv_meth}
+\end{figure}
+\\
+\\
+
+\textbf{Liver}
+
+Predictions of liver injuries improved steadily across training and validation sets. Only marginally lower than the training accuracy (~0.94), the final epoch's validation accuracy was close to 0.91, indicating strong feature learning and generalization for this organ.
+\\
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/liver.png}
+    \caption{Liver}
+    \label{fig:dv_meth}
+\end{figure}
+\\
+
+\textbf{Spleen}
+\\
+There was more variation in the spleen accuracy. Validation accuracy varied significantly, ranging from 0.60 to 0.80, whereas training accuracy increased steadily (>0.9 by epoch 10). These variations might point to label ambiguity in spleen annotations or data noise, indicating that the dataset needs to be refined.
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/spleen.png}
+    \caption{Spleen}
+    \label{fig:dv_meth}
+\end{figure}
+\\
+
+\subsubsection{Loss Curve Analysis}
+While the validation loss exhibited a declining trend with sporadic spikes, the training loss steadily dropped from 2.5 to roughly 1.1. Although the spikes indicate sporadic \textbf{batch-wise instability or overfitting} to particular features in the training set, the decreasing trend indicates successful learning.
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.6\textwidth]{images/losscurve.png}
+    \caption{Loss Curve Analysis}
+    \label{fig:dv_meth}
+\end{figure}
+\\
+
+\subsubsection{Best Epoch and Summary Metrics}
+The epoch with the \textbf{lowest validation loss} was programmatically extracted in order to determine the ideal training point. For every organ, the corresponding accuracy was noted:
+
+\begin{itemize}
+    \item \textbf{Best Epoch:} Determined automatically with \verb|np.argmin(val_loss)|
+    \item \textbf{Best Validation Accuracies:}
+    \begin{itemize}
+        \item Bowel: ~0.52
+        \item Extra: ~0.87
+        \item Kidney: ~0.92
+        \item Liver: ~0.91
+        \itemSpleen: ~0.79
+    \end{itemize}
+    \item \textbf{Mean Best Accuracy:} ~0.80
+    \item \textbf{Best Validation Loss:} ~2.98
+\end{itemize}
+
+According to these findings, the model works particularly well for structured injuries (liver, kidney, and extra), but bowel and spleen injuries might need more fine-tuning, data augmentation, or improved labeling.
+
+
+\section{Inference}
+A post-training pipeline was developed to standardize, preprocess, and infer injury labels in order to produce predictions on the test set, which consists of medical images in \textbf{DICOM format}. Image preprocessing, model inference, prediction post-processing, and submission generation are the four main steps that make up this stage.
+
+\subsection{DICOM to PNG Conversion}
+The first step was to convert DICOM slices to PNG images because the trained model works with PNG format images.
+
+\begin{itemize}
+    \item The script creates folder paths to access DICOM files for each patient and series and loads the test metadata \verb|(test_series_meta.csv).|
+    \item To minimize redundancy and computational load, slices from the volume were sampled using a stride of 10.
+    \item DICOM pixel arrays were standardized, rescaled, normalized, and saved as resized PNGs (256x256) in a structured directory using Pydicom and OpenCV
+\end{itemize}
+
+
+\verb|data = (data - np.min(data)) / (np.max(data) + 1e-5)|
+
+\verb|cv2.imwrite(new_path, img)|
+\\
+The test data is guaranteed to match the input expectations of the model trained on PNG-formatted data thanks to this preprocessing.
+
+\subsection{TensorFlow Dataset for Test Images}
+To effectively manage the loading of test data during inference:
+\begin{itemize}
+    \item A tf.data.The generated PNG paths were used to create the dataset.
+    \item The same preprocessing logic used in the training pipeline was used to decode and resize each image.
+    \item To enable parallelized loading, images were prefetched and batched.
+\end{itemize}
+
+\verb|ds = tf.data.Dataset.from_tensor_slices(image_paths)|
+
+\verb|.map(decode_image)|
+
+\verb|.batch(config.BATCH_SIZE)|
+
+
+The accuracy and caliber of PNG image decoding were validated through visualization using 
+
+\verb|keras_cv.visualization.plot_image_gallery().|
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{images/dv3.png}\\[1ex]
+    \includegraphics[width=0.8\textwidth]{images/dv4.png}
+    \caption{Data Visualization}
+    \label{fig:dv_meth}
+\end{figure}
+
+
+\subsection{Model Inference per Patient}
+It may be necessary to aggregate the model predictions for each patient's multiple slices.
+
+\begin{itemize}
+    \item The model made predictions on the slices for every distinct \verb|patient_id.|
+    \item To generate a reliable per-patient output, predictions for individual slices were averaged and max-pooled.
+    \item Predictions were reorganized into the necessary format by a post-processing function:
+    \begin{itemize}
+        \item Bowel and extravasation injuries were represented using binary splits (injury, healthy).
+        \item Liver, kidney, and spleen used 3-class probability vectors (healthy, low, high).
+    \end{itemize}
+  
+\end{itemize}
+
+
+\verb|pred = np.mean(pred.reshape(1, len(patient_paths), 11), axis=0)|
+
+\verb|proc_pred = post_proc(pred)|
+
+
+This strategy maintained consistency with training logic while guaranteeing that predictions took into account several anatomical slices
+
+
+
+\subsection{Final Submission}
+Upon acquiring predictions for every patient:
+
+\begin{itemize}
+    \item  The prediction array's shape was confirmed to correspond with the anticipated format: (\verb|N_patients|, 13 classes).
+    \item Along with \verb|patient_id|, the predictions were added to a fresh DataFrame.
+     \item The columns were rearranged according to a specified index order in order to conform to the official RSNA submission format.
+     \item The output was saved as submission.csv after being combined with the example submission template.
+\end{itemize}
+
+
+\verb|pred_df.insert(0, "patient_id", patient_ids)|
+
+\verb|sub_df = sub_df.merge(pred_df, on="patient_id", how="left")|
+
+\verb|sub_df.to_csv("submission.csv", index=False)|
+\\
+
+A probability distribution for each injury type and severity class for each test patient is included in the final output file. As an example:
+\\
+
+\verb|patient_id	bowel_injury	extravasation_injury	kidney_healthy	...|
+
+\verb|48843	0.083825	0.213047	0.113808	...|
+
+
+\verb|50046	0.017473	0.363355	0.716058	...|
+
+
+\section{Conclusion}
+As part of the RSNA 2023 Abdominal Trauma Detection Challenge, we created a comprehensive deep learning pipeline for identifying and categorizing abdominal injuries using CT scans. Based on a multi-output architecture with a ResNet50 backbone pretrained on ImageNet, the model was optimized to predict multiple binary and multi-class labels that represent the type and severity of injury across five vital abdominal structures: the kidney, liver, spleen, bowel, and extravasation (internal bleeding). To handle the high-dimensional medical imaging data, the method included effective data loading and batching techniques, image augmentation using KerasCV, and strong data preprocessing using TensorFlow's tf.data pipeline. Inference was carried out on a per-patient basis by aggregating predictions across chosen slices from DICOM volumes that were converted to PNG format, and model performance was tracked using per-organ accuracy metrics. According to the competition's evaluation framework, the system generated results that were ready for submission and showed promise in a number of anatomical categories. The study demonstrates how AI-based tools can help physicians in trauma situations by quickly, automatically, and accurately classifying injuries from imaging data.
+
+\subsection{Limitations}
+Inference was carried out on a per-patient basis by aggregating predictions across chosen slices from DICOM volumes that were converted to PNG format, and model performance was tracked using per-organ accuracy metrics. According to the competition's evaluation framework, the system generated results that were ready for submission and showed promise in a number of anatomical categories. The study demonstrates how AI-based tools can help physicians in trauma situations by quickly, automatically, and accurately classifying injuries from imaging data. Although stride-based sampling during inference reduced computational load, it might have omitted important slices, resulting in gaps in clinical coverage. Finally, misclassifications may have been caused by the nature of multi-label medical annotation and the possible presence of noisy or ambiguous labels in the training set, especially in organs where validation accuracy displayed higher variance, such as the bowel and spleen
+
+\subsection{Future Work}
+
+In the future, a number of approaches could be investigated to enhance the model's functionality and clinical applicability even more. By incorporating 3D modeling methods like slice-wise attention mechanisms or 3D convolutional neural networks, the system may be able to take advantage of volumetric context and more closely resemble how radiologists interpret CT scans. Compared to conventional natural image pretraining, domain-specific pretraining using extensive unlabeled medical imaging datasets via contrastive or self-supervised learning may produce more useful feature representations. To increase model robustness, data augmentation could be improved with simulated noise, anatomical deformations, or transformations inspired by clinical practice. By offering visual cues in addition to predictions, injury localization techniques like saliency maps or weakly-supervised segmentation that improve interpretability would also encourage clinical adoption. Furthermore, incorporating uncertainty estimation techniques may aid in indicating each prediction's dependability, allowing for more cautious decision-making in situations that are unclear. The model should be tested on separate datasets and in conjunction with radiologists to evaluate its performance in real-world clinical settings and possibly expand its usefulness to complete trauma triage workflows in order to guarantee practical applicability
+\clearpage
+
+\section{Acknowledgment}
+The author admits to using ChatGPT and Deepseek, two AI tools, to improve sentence structure and help create basic syntaxes for equations, tables, and images. Nonetheless, the author certifies that all of the analysis, research, and creative contributions included in this report are entirely his own. The  \href{https://github.com/aafiakhalid5/Abdominal-Trauma-Detection}{ Author's GitHub Page} has the code for every piece of work that is discussed in this paper. If you are interested in contributing to the repository, please do so.
+
+\clearpage
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+
+\end{document}
